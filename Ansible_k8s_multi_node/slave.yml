@@ -1,0 +1,10 @@
+- hosts: slaves
+  name: "Joining Slave Nodes"
+  vars_files:
+  - variable_file
+  tasks:
+  - name: "Copying token to slave nodes"
+    copy: src={{ token }} dest=join_token
+
+  - name: "Joining both the slave nodes with master node"
+    shell: "`grep -i 'kubeadm join' join_token`"

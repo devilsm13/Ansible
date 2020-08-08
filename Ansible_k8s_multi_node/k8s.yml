@@ -1,0 +1,137 @@
+- hosts: master
+  name: "setting up master hostname"
+  tasks:
+  - name: "Setting up the hostname in master node"
+    hostname:
+      name: master
+
+
+- hosts: slave1
+  name: "setting up slave1 hostname"
+  tasks:
+  - name: "Setting up the hostname in first slave node"
+    hostname:
+      name: slave1
+      
+
+- hosts: slave2
+  name: "setting up slave2 hostname"
+  tasks:
+  - name: "Setting up the hostname in second slave node"
+    hostname:
+      name: slave2
+
+
+      
+- hosts: k8s
+  name: "Common configuration for all the nodes"
+
+
+  tasks:
+  - name: "Updating Local DNS with the Hostnames"
+    copy:
+      src: hosts
+      dest: /etc/hosts   
+
+
+  - name: "CREATING REPO FOR DOCKER"
+    yum_repository:
+      description: "repo for docker"
+      name: docker 
+      baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+      gpgcheck: no
+
+  - name: "INSTALLING DOCKER PACKAGE"
+    package:
+      name: "docker-ce-3:18.09.1-3.el7"
+      state: present
+
+  - name: "Stop and disable firewalld"
+    service:
+      name: firewalld
+      state: stopped
+      enabled: False
+
+  - name: "Configuring Yum for Kubelet, Kubeadm, and Kubectl"
+    yum_repository:
+      name: kubernetes
+      description: Repo for Kubernetes
+      baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-$basearch
+      enabled: yes
+      gpgcheck: yes
+      repo_gpgcheck: yes
+      gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+      exclude: kubelet kubeadm kubectl
+
+  - name: "Disable SELinux"
+    selinux:
+      state: disabled
+
+  - name: "Installing Kubelet, Kubeadm, and Kubectl"
+    yum:
+      name: [ 'kubectl', 'kubeadm', 'kubelet' ]
+      state: present
+      disable_excludes: kubernetes
+
+  - name: "Docker Services"
+    service:
+      name: docker
+      state: started
+      enabled: yes
+
+  - name: "Copy Daemon file to change cgroup Driver"
+    copy:
+      src: daemon.json
+      dest: /etc/docker/
+
+  - name: "Restart docker services"
+    service:
+      name: docker
+      state: restarted
+
+
+  - name: "Turn off swap"
+    shell: "swapoff -a"
+
+
+  - name: "COmmenting Swap in /etc/fstab file"
+    replace:
+      path: /etc/fstab
+      regexp: '^[^#](.*swap*)'
+      replace: '#\1'
+    
+  - name: "Installing iproute-tc"
+    package:
+      name: iproute-tc
+      state: present
+
+  - name: "Enabling IPtables Bridge Firewall Rule"
+    command: "echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables"
+
+  - name: "Starting Kubelet service"
+    service:
+      name: kubelet
+      state: started
+      enabled: yes
+
+
+- hosts: master
+  name: "Initializing the Kubernetes cluser on Master Node"
+  vars_files:
+  - variable_file  
+  tasks:
+  - name: "Initializing the cluster"
+    command: "kubeadm init --pod-network-cidr=10.10.1.0/16"
+    register: output
+    
+  - name: "Storing Token and Logs in the File to use it later"
+    local_action: copy content={{ output.stdout }} dest={{ token }}
+
+  - name: "Copying configuration files"
+    shell: |
+     mkdir -p $HOME/.kube
+     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+     sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+  - name: "Installing CNI"
+    command: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
