@@ -1,0 +1,19 @@
+---
+# tasks file for webserver
+- name: "installing required package"
+  package:
+          name: "httpd"
+          state: present
+
+- name: "Copying content to the webserver"
+  copy:
+          content: "Hey there!! The website has been deployed"
+          dest: "/var/www/html/index.html"
+
+- name: "Starting the webservice"
+  service:
+          name: "httpd"
+          state: started
+          enabled: yes
+
+         

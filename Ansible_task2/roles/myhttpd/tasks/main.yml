@@ -1,0 +1,12 @@
+---
+# tasks file for myhttpd
+- ec2:
+        key_name: "key_name"
+        instance_type: t2.micro
+        image: ami-052c08d70def0ac62
+        count: 1
+        instance_tags:
+          name: "Ansible-web"
+        group_id: your_sg
+
+
